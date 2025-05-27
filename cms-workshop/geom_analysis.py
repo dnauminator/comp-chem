@@ -12,6 +12,8 @@ def calc_dist(atom1_coord, atom2_coord):
 
 def bond_check(atom_distance, min_length=0, max_length=1.5):
     """Checks if a distance is a bond based on minimum and maximum bond lengths."""
+    if atom_distance < 0:
+        raise ValueError(F'Invalid atom distance {atom_distance}. Distance can not be less than 0!')
     if atom_distance > min_length and atom_distance <= max_length:
         return True
     else:
@@ -19,6 +21,11 @@ def bond_check(atom_distance, min_length=0, max_length=1.5):
 
 def open_xyz(xyzfilename):
     """Opens, reads xyz file. Outputs a tuple of symbols and coordinates."""
+    fpath, extension = os.path.splitext(xyzfilename)
+
+    if extension.lower() != '.xyz':
+        raise ValueError("Incorrect file type! File must be type xyz")
+    
     xyz_file = numpy.genfromtxt(fname = xyzfilename, skip_header = 2, dtype = 'unicode')
     symbols = xyz_file[:,0]
     coord = (xyz_file[:,1:])
