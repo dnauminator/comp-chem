@@ -1,14 +1,8 @@
 # Project: Predicting Molecular Properties with Linear Regression
 
-# --- 1. C++ warning suppression with stderr ---
-import os
-import sys
-from io import StringIO
-# Preserve the original stderr globally
-original_stderr = sys.stderr
-
 # --- Imports ---
 import matplotlib
+import warnings
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import Descriptors
@@ -20,25 +14,10 @@ import matplotlib.pyplot as plt
 import numpy as np # For np.allclose check
 import argparse # For command-line arguments
 
-# Configure Matplotlib backend at the very top for non-interactive plotting
+# Configure Matplotlib backend at top for non-interactive plotting
 matplotlib.use('Agg')
 
-
 # --- Function Definitions ---
-
-def suppress_warnings_temporarily():
-    """Redirects stderr to a dummy stream to suppress C++ warnings."""
-    global sys, original_stderr # Use global to modify sys.stderr
-    dummy_stderr = StringIO()
-    sys.stderr = dummy_stderr
-    return dummy_stderr
-
-def restore_warnings(dummy_stderr):
-    """Restores stderr to its original state and closes the dummy stream."""
-    global sys, original_stderr
-    sys.stderr = original_stderr
-    if dummy_stderr and not dummy_stderr.closed:
-        dummy_stderr.close()
 
 def calculate_rdkit_descriptors(smiles_list_cleaned, smiles_column_name, df_molecules_clean, custom_descriptor_list=None):
     """
@@ -61,12 +40,9 @@ def calculate_rdkit_descriptors(smiles_list_cleaned, smiles_column_name, df_mole
 
     descriptor_data = []
 
-    for i, mol in enumerate(valid_mols): # Added enumerate for molecule index tracking
+    for i, mol in enumerate(valid_mols):
         row = {}
         for name, func in descriptors_to_calculate:
-            # --- DEBUGGING LINE: THIS SHOULD BE COMMENTED OUT OR REMOVED IN FINAL CODE ---
-            # print(f"DEBUG: Calculating descriptor '{name}' for molecule {i}")
-
             try:
                 row[name] = func(mol)
             except Exception:
@@ -163,12 +139,11 @@ def main():
     # --- Prepare the list of RDKit Descriptors, excluding known problematic ones ---
     # This filter aims to remove descriptors that often cause the MorganGenerator warning
     # by internally calling deprecated RDKit fingerprinting methods.
-    # Note: If new RDKit versions change which descriptors cause this, this list may need updates.
     # The common culprits are often BCUT2D_* and some EStateIndex variants.
-    # NOW ALSO EXCLUDING THE FpDensityMorgan DESCRIPTORS!
+    # FpDensityMorgan1, 2, and 3 are also explicitly excluded now.
     filtered_descriptor_list = []
     for name, func in Descriptors.descList:
-        # Exclude BCUT2D and EStateIndex descriptors, AND FpDensityMorgan descriptors
+        # Exclude FpDensityMorgan descriptors
         if not name.startswith('FpDensityMorgan'):
             filtered_descriptor_list.append((name, func))
     print(f"\nFiltered descriptor list to {len(filtered_descriptor_list)} descriptors to avoid MorganGenerator warnings.")
@@ -176,16 +151,11 @@ def main():
     # --- Main Script Logic ---
 
     # --- Step 1: Importing and cleaning the CSV file ---
-    dummy_stderr_csv = suppress_warnings_temporarily() # <-- UNCOMMENT THIS LINE FOR FINAL CODE
     try:
         df_molecules = pd.read_csv(csv_filepath, sep=csv_delimiter, on_bad_lines='skip')
     except Exception as e:
-        restore_warnings(dummy_stderr_csv) # <-- UNCOMMENT THIS LINE FOR FINAL CODE
         print(f"Error reading CSV file '{csv_filepath}': {e}")
-        sys.exit(1) # Exit if CSV reading fails
-    finally:
-        restore_warnings(dummy_stderr_csv) # <-- UNCOMMENT THIS LINE FOR FINAL CODE
-        # pass # REMOVE THIS 'pass' LINE
+        sys.exit(1)
 
     print("File loading successful!")
     print("Columns in the DataFrame:", df_molecules.columns.tolist())
@@ -225,19 +195,12 @@ def main():
     print(f"SMILES list size after cleaning: {len(smiles_list_cleaned)}")
 
     # --- Calculate RDKit Descriptors ---
-    dummy_stderr_rdkit = suppress_warnings_temporarily() # <-- UNCOMMENT THIS LINE FOR FINAL CODE
     try:
         # Pass the filtered list to the descriptor calculation function
         df_descriptors = calculate_rdkit_descriptors(smiles_list_cleaned, smiles_column_name, df_molecules_clean, custom_descriptor_list=filtered_descriptor_list)
     except Exception as e:
-        restore_warnings(dummy_stderr_rdkit) # <-- UNCOMMENT THIS LINE FOR FINAL CODE
         print(f"Error during RDKit descriptor calculation: {e}")
         sys.exit(1)
-    finally:
-        restore_warnings(dummy_stderr_rdkit) # <-- UNCOMMENT THIS LINE FOR FINAL CODE
-        # pass # REMOVE THIS 'pass' LINE
-
-    # ... (rest of your main function code) ...
 
     # --- Step 2: Prepare Data for Scikit-learn ---
     initial_features = [col for col in df_descriptors.columns if col != target_property and pd.api.types.is_numeric_dtype(df_descriptors[col])]
@@ -249,7 +212,7 @@ def main():
 
 
     # --- Step 3: Train-Test Split ---
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=42)
 
     print(f"\n--- Verifying Data Before Model Training ---")
     print(f"Shape of X_train: {X_train.shape}")
